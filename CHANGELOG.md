@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.2] - 2024-12-28
+
+### Changed
+- Removed console logs for cleaner production code
+
 ## [1.0.1] - 2024-12-28
 
 ### Changed

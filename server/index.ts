@@ -56,7 +56,6 @@ async function validateGitHubToken(token: string) {
             following: followingRes.data.map((u: { id: number }) => u.id)
         };
     } catch (error) {
-        console.error('GitHub validation failed:', error);
         return null;
     }
 }
@@ -173,7 +172,6 @@ Bun.serve({
     
     websocket: {
         open(ws: BunWebSocket) {
-            console.log('Client connected');
         },
         
         async message(ws: BunWebSocket, message: string | ArrayBuffer) {
@@ -224,8 +222,6 @@ Bun.serve({
                                 isAlive: true,
                                 lastHeartbeat: Date.now()
                             };
-                            
-                            console.log(`GitHub user logged in: ${github.login}`);
                         } else {
                             // Token invalid, treat as guest
                             clientData = {
@@ -253,7 +249,6 @@ Bun.serve({
                             isAlive: true,
                             lastHeartbeat: Date.now()
                         };
-                        console.log(`Guest logged in: ${data.username}`);
                     }
                     
                     clients.set(ws, clientData);
@@ -282,7 +277,6 @@ Bun.serve({
                         code,
                         expiresIn: '48 hours'
                     }));
-                    console.log(`Invite created: ${code} by ${clientData.username}`);
                     return;
                 }
                 
@@ -351,12 +345,10 @@ Bun.serve({
                 // Create alias
                 if (data.type === 'createAlias' && data.githubUsername && data.guestUsername && data.githubId) {
                     await queries.createAlias(data.githubUsername, data.guestUsername, data.githubId);
-                    console.log(`Alias created: ${data.guestUsername} -> ${data.githubUsername}`);
                     return;
                 }
                 
             } catch (error) {
-                console.error('Error handling message:', error);
                 ws.send(JSON.stringify({ type: 'error', message: 'Invalid message' }));
             }
         },
@@ -364,8 +356,6 @@ Bun.serve({
         async close(ws: BunWebSocket) {
             const clientData = clients.get(ws);
             if (clientData) {
-                console.log(`User disconnected: ${clientData.username}`);
-                
                 if (clientData.githubId) {
                     await queries.updateLastSeen(clientData.githubId);
                 }
@@ -382,7 +372,6 @@ setInterval(() => {
     
     for (const [ws, clientData] of clients) {
         if (!clientData.isAlive) {
-            console.log(`Heartbeat timeout: ${clientData.username}`);
             ws.close();
             continue;
         }
@@ -391,5 +380,3 @@ setInterval(() => {
         ws.send(JSON.stringify({ type: 'hb', ts: now }));
     }
 }, 30000);
-
-console.log(`CodeCircle server running on port ${PORT}`);

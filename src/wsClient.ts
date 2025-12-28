@@ -71,7 +71,6 @@ export class WsClient {
 
     private attemptConnection() {
         if (!this.username) {
-            console.warn('Cannot connect without username');
             this.setConnectionStatus('error');
             return;
         }
@@ -79,16 +78,13 @@ export class WsClient {
         this.setConnectionStatus('connecting');
 
         try {
-            // Get server URL from settings or use default
             const config = vscode.workspace.getConfiguration('codecircle');
             const customUrl = config.get<string>('serverUrl');
             const serverUrl = customUrl || DEFAULT_SERVER;
 
-            console.log(`Connecting to: ${serverUrl}`);
             this.ws = new WebSocket(serverUrl);
 
             this.ws.on('open', () => {
-                console.log('WebSocket connected');
                 this.reconnectAttempts = 0;
                 this.setConnectionStatus('connected');
 
@@ -107,17 +103,15 @@ export class WsClient {
                     const message: WsMessage = JSON.parse(data.toString());
                     this.handleMessage(message);
                 } catch (e) {
-                    console.error('Error parsing message:', e);
+                    // Invalid message
                 }
             });
 
             this.ws.on('error', (error) => {
-                console.error('WebSocket error:', error);
                 this.setConnectionStatus('error');
             });
 
             this.ws.on('close', () => {
-                console.log('WebSocket disconnected');
                 this.setConnectionStatus('disconnected');
 
                 if (!this.isIntentionallyClosed) {
@@ -126,7 +120,6 @@ export class WsClient {
             });
 
         } catch (error) {
-            console.error('Failed to connect:', error);
             this.setConnectionStatus('error');
             this.scheduleReconnect();
         }
@@ -182,15 +175,12 @@ export class WsClient {
 
     private scheduleReconnect() {
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            console.error('Max reconnection attempts reached');
             this.setConnectionStatus('error');
             return;
         }
 
         const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 60000);
         this.reconnectAttempts++;
-
-        console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
 
         this.reconnectTimeout = setTimeout(() => {
             this.attemptConnection();

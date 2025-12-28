@@ -9,7 +9,6 @@ import { createGuestProfile } from './utils';
 import { ConnectionStatus, UserStatus } from './types';
 
 export async function activate(context: vscode.ExtensionContext) {
-    console.log('CodeCircle is activating...');
 
     const githubService = new GitHubService();
     
@@ -117,10 +116,7 @@ export async function activate(context: vscode.ExtensionContext) {
             await sidebarProvider.connectGitHub(profile, followers, following);
             chatWebviewProvider.setCurrentUsername(profile.login);
             startActivityTracker();
-            
-            console.log(`Logged in as ${profile.login}`);
         } catch (error) {
-            console.error('Failed to restore GitHub session:', error);
             await context.globalState.update('authState', undefined);
         }
     } else if (authState === 'guest') {
@@ -129,7 +125,6 @@ export async function activate(context: vscode.ExtensionContext) {
             await sidebarProvider.connectAsGuest(username);
             chatWebviewProvider.setCurrentUsername(username);
             startActivityTracker();
-            console.log(`Logged in as guest: ${username}`);
         }
     }
 
@@ -153,7 +148,6 @@ export async function activate(context: vscode.ExtensionContext) {
                 vscode.window.showInformationMessage(`Connected as ${profile.login}`);
             } catch (error) {
                 vscode.window.showErrorMessage('Failed to connect to GitHub');
-                console.error(error);
             }
         })
     );
@@ -299,9 +293,6 @@ export async function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    console.log('CodeCircle activated');
 }
 
-export function deactivate() {
-    console.log('CodeCircle deactivated');
-}
+export function deactivate() {}

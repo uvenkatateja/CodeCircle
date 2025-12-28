@@ -2,7 +2,7 @@
   "name": "codecircle",
   "displayName": "CodeCircle",
   "description": "See your GitHub friends' real-time coding status in VS Code",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "publisher": "uvenkatateja",
   "author": {
     "name": "uvenkatateja"
