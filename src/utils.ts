@@ -3,7 +3,7 @@ import { UserStatus, GitHubUser } from './types';
 
 export const GUEST_AVATAR = 'https://avatars.githubusercontent.com/u/0?s=200&v=4';
 // Update this after deploying your server to Railway
-export const DEFAULT_SERVER = 'ws://localhost:8080';
+export const DEFAULT_SERVER = 'wss://codecircle-server.onrender.com';
 
 /**
  * Create guest profile
