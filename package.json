@@ -1,0 +1,233 @@
+{
+  "name": "codecircle",
+  "displayName": "CodeCircle",
+  "description": "See your GitHub friends' real-time coding status in VS Code",
+  "version": "1.0.0",
+  "publisher": "uvenkatateja",
+  "author": {
+    "name": "uvenkatateja"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/uvenkatateja/codecircle.git"
+  },
+  "homepage": "https://github.com/uvenkatateja/codecircle#readme",
+  "bugs": {
+    "url": "https://github.com/uvenkatateja/codecircle/issues"
+  },
+  
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "codecircle.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "codecircle.connectGitHub",
+        "title": "Connect GitHub",
+        "icon": "$(github)"
+      },
+      {
+        "command": "codecircle.continueAsGuest",
+        "title": "Continue as Guest",
+        "icon": "$(account)"
+      },
+      {
+        "command": "codecircle.createInvite",
+        "title": "Create Invite Link",
+        "icon": "$(link)"
+      },
+      {
+        "command": "codecircle.acceptInvite",
+        "title": "Accept Invite Code",
+        "icon": "$(person-add)"
+      },
+      {
+        "command": "codecircle.pinFriend",
+        "title": "Pin as Close Friend",
+        "icon": "$(pin)"
+      },
+      {
+        "command": "codecircle.unpinFriend",
+        "title": "Unpin Friend",
+        "icon": "$(pinned)"
+      },
+      {
+        "command": "codecircle.openChat",
+        "title": "Open Chat",
+        "icon": "$(comment)"
+      },
+      {
+        "command": "codecircle.openSettings",
+        "title": "Settings",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "codecircle.signOut",
+        "title": "Sign Out",
+        "icon": "$(sign-out)"
+      },
+      {
+        "command": "codecircle.copyUsername",
+        "title": "Copy Username",
+        "icon": "$(clippy)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "codecircle.refresh",
+          "when": "view == codecircle-friends || view == codecircle-github",
+          "group": "navigation"
+        },
+        {
+          "command": "codecircle.createInvite",
+          "when": "view == codecircle-friends",
+          "group": "navigation"
+        },
+        {
+          "command": "codecircle.acceptInvite",
+          "when": "view == codecircle-friends",
+          "group": "navigation"
+        },
+        {
+          "command": "codecircle.openSettings",
+          "when": "view == codecircle-friends",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "codecircle.pinFriend",
+          "when": "view == codecircle-github && viewItem == user",
+          "group": "inline"
+        },
+        {
+          "command": "codecircle.unpinFriend",
+          "when": "view == codecircle-friends && viewItem == user",
+          "group": "inline"
+        },
+        {
+          "command": "codecircle.openChat",
+          "when": "(view == codecircle-friends || view == codecircle-github) && (viewItem == user || viewItem == user-manual)",
+          "group": "inline"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "codecircle-sidebar",
+          "title": "CodeCircle",
+          "icon": "$(account)"
+        }
+      ]
+    },
+    "views": {
+      "codecircle-sidebar": [
+        {
+          "id": "codecircle-friends",
+          "name": "Close Friends"
+        },
+        {
+          "id": "codecircle-github",
+          "name": "GitHub Network"
+        },
+        {
+          "id": "codecircle-status",
+          "name": "Connection Status"
+        },
+        {
+          "id": "codecircle-chat",
+          "name": "Chat",
+          "type": "webview"
+        }
+      ],
+      "explorer": [
+        {
+          "id": "codecircle-explorer",
+          "name": "Friends Online",
+          "contextualTitle": "CodeCircle"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "codecircle-friends",
+        "contents": "Welcome to CodeCircle!\n\nConnect with GitHub to see your network, or continue as a guest.\n\n[Connect GitHub](command:codecircle.connectGitHub)\n[Continue as Guest](command:codecircle.continueAsGuest)",
+        "when": "!codecircle.authenticated"
+      }
+    ],
+    "configuration": {
+      "title": "CodeCircle",
+      "properties": {
+        "codecircle.visibilityMode": {
+          "type": "string",
+          "enum": ["everyone", "followers", "following", "close-friends", "invisible"],
+          "default": "everyone",
+          "description": "Who can see your online status"
+        },
+        "codecircle.shareProject": {
+          "type": "boolean",
+          "default": true,
+          "description": "Share current project name"
+        },
+        "codecircle.shareLanguage": {
+          "type": "boolean",
+          "default": true,
+          "description": "Share current programming language"
+        },
+        "codecircle.shareActivity": {
+          "type": "boolean",
+          "default": true,
+          "description": "Share activity (Coding, Debugging, Idle)"
+        },
+        "codecircle.showInStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show online count in status bar"
+        },
+        "codecircle.showInExplorer": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show friends in Explorer sidebar"
+        },
+        "codecircle.serverUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Custom server URL (leave empty for default)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
+    "watch": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
+    "compile": "tsc -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "@types/ws": "^8.5.10",
+    "esbuild": "^0.19.8",
+    "typescript": "^5.3.2"
+  },
+  "dependencies": {
+    "@octokit/rest": "^20.0.2",
+    "ws": "^8.14.2"
+  }
+}
