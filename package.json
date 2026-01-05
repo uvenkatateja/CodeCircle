@@ -2,7 +2,7 @@
   "name": "codecircle",
   "displayName": "CodeCircle",
   "description": "See your GitHub friends' real-time coding status in VS Code",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "publisher": "uvenkatateja",
   "author": {
     "name": "uvenkatateja"
@@ -104,6 +104,11 @@
         },
         {
           "command": "codecircle.openSettings",
+          "when": "view == codecircle-friends",
+          "group": "navigation"
+        },
+        {
+          "command": "codecircle.signOut",
           "when": "view == codecircle-friends",
           "group": "navigation"
         }
