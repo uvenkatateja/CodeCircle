@@ -1,12 +1,10 @@
 import * as vscode from 'vscode';
 import { GitHubService } from './githubService';
 import { SidebarProvider, GitHubViewProvider } from './sidebarProvider';
-import { StatusProvider } from './statusProvider';
 import { ExplorerProvider } from './explorerProvider';
 import { ChatWebviewProvider } from './chatWebview';
 import { ActivityTracker } from './activityTracker';
-import { createGuestProfile } from './utils';
-import { ConnectionStatus, UserStatus } from './types';
+import { UserStatus } from './types';
 
 export async function activate(context: vscode.ExtensionContext) {
 
@@ -15,7 +13,6 @@ export async function activate(context: vscode.ExtensionContext) {
     // Initialize providers
     const sidebarProvider = new SidebarProvider(context, githubService);
     const githubViewProvider = new GitHubViewProvider(sidebarProvider);
-    const statusProvider = new StatusProvider();
     const explorerProvider = new ExplorerProvider();
 
     // Initialize chat webview
@@ -28,11 +25,6 @@ export async function activate(context: vscode.ExtensionContext) {
     // Connect chat message handler
     sidebarProvider.setOnChatMessage((message) => {
         chatWebviewProvider.onMessageReceived(message);
-    });
-
-    // Listen to connection status changes
-    sidebarProvider.onConnectionStatusChanged((status: ConnectionStatus) => {
-        statusProvider.setStatus(status);
     });
 
     // Listen to user updates for explorer
@@ -54,12 +46,6 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.createTreeView('codecircle-github', {
             treeDataProvider: githubViewProvider,
             showCollapseAll: true
-        })
-    );
-
-    context.subscriptions.push(
-        vscode.window.createTreeView('codecircle-status', {
-            treeDataProvider: statusProvider
         })
     );
 

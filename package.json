@@ -139,15 +139,12 @@
       "codecircle-sidebar": [
         {
           "id": "codecircle-friends",
-          "name": "Close Friends"
+          "name": "Friends"
         },
         {
           "id": "codecircle-github",
-          "name": "GitHub Network"
-        },
-        {
-          "id": "codecircle-status",
-          "name": "Connection Status"
+          "name": "GitHub Network",
+          "visibility": "collapsed"
         },
         {
           "id": "codecircle-chat",
@@ -159,7 +156,8 @@
         {
           "id": "codecircle-explorer",
           "name": "Friends Online",
-          "contextualTitle": "CodeCircle"
+          "contextualTitle": "CodeCircle",
+          "visibility": "collapsed"
         }
       ]
     },

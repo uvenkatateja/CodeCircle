@@ -3,7 +3,7 @@ import { UserStatus, GitHubUser, ConnectionStatus, ChatMessage } from './types';
 import { WsClient } from './wsClient';
 import { GitHubService } from './githubService';
 import { ChatStorage } from './chatStorage';
-import { createGuestProfile, buildUserDescription, buildUserTooltip, getStatusIcon } from './utils';
+import { createGuestProfile, formatLastSeen } from './utils';
 
 export class SidebarProvider implements vscode.TreeDataProvider<TreeNode> {
     private _onDidChangeTreeData = new vscode.EventEmitter<TreeNode | undefined | void>();
@@ -28,6 +28,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<TreeNode> {
     public isAuthenticated: boolean = false;
     private _connectionStatus: ConnectionStatus = 'disconnected';
     private onChatMessageCallback: ((message: ChatMessage) => void) | null = null;
+    private recentChats: string[] = []; // Track users we've chatted with
 
     constructor(
         context: vscode.ExtensionContext,
@@ -38,6 +39,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<TreeNode> {
         this.chatStorage = new ChatStorage(context);
         this.profile = { id: 0, login: '', avatar_url: '' };
         this.closeFriends = context.globalState.get<string[]>('closeFriends', []);
+        this.recentChats = context.globalState.get<string[]>('recentChats', []);
 
         this.wsClient = new WsClient(
             (users) => {
@@ -51,13 +53,29 @@ export class SidebarProvider implements vscode.TreeDataProvider<TreeNode> {
                 this.refresh();
             },
             (message) => {
-                // Save incoming message locally
                 this.chatStorage.saveIncomingMessage(message);
+                this.addToRecentChats(message.from);
                 if (this.onChatMessageCallback) {
                     this.onChatMessageCallback(message);
                 }
             }
         );
+    }
+
+    private addToRecentChats(username: string) {
+        if (username === this.profile.login) return;
+        
+        // Remove if exists, then add to front
+        this.recentChats = this.recentChats.filter(u => u.toLowerCase() !== username.toLowerCase());
+        this.recentChats.unshift(username);
+        
+        // Keep only last 10
+        if (this.recentChats.length > 10) {
+            this.recentChats = this.recentChats.slice(0, 10);
+        }
+        
+        this.context.globalState.update('recentChats', this.recentChats);
+        this.refresh();
     }
 
     get connectionStatus(): ConnectionStatus {
@@ -92,9 +110,6 @@ export class SidebarProvider implements vscode.TreeDataProvider<TreeNode> {
         this.onChatMessageCallback = callback;
     }
 
-    /**
-     * Connect as GitHub user
-     */
     async connectGitHub(profile: GitHubUser, followers: GitHubUser[], following: GitHubUser[]) {
         this.profile = profile;
         this.followers = followers;
@@ -111,9 +126,6 @@ export class SidebarProvider implements vscode.TreeDataProvider<TreeNode> {
         this.refresh();
     }
 
-    /**
-     * Connect as guest
-     */
     async connectAsGuest(username: string) {
         this.profile = createGuestProfile(username);
         this.followers = [];
@@ -130,9 +142,6 @@ export class SidebarProvider implements vscode.TreeDataProvider<TreeNode> {
         this.refresh();
     }
 
-    /**
-     * Disconnect and sign out
-     */
     async signOut() {
         this.wsClient.disconnect();
         this.profile = { id: 0, login: '', avatar_url: '' };
@@ -151,32 +160,20 @@ export class SidebarProvider implements vscode.TreeDataProvider<TreeNode> {
         this.refresh();
     }
 
-    /**
-     * Reconnect WebSocket
-     */
     reconnect() {
         if (this.isAuthenticated) {
             this.wsClient.reconnect();
         }
     }
 
-    /**
-     * Update status
-     */
     updateStatus(status: Partial<UserStatus>) {
         this.wsClient.updateStatus(status);
     }
 
-    /**
-     * Send WebSocket message
-     */
     sendMessage(data: any) {
         this.wsClient.send(data);
     }
 
-    /**
-     * Add close friend
-     */
     addCloseFriend(username: string) {
         if (!this.closeFriends.includes(username)) {
             this.closeFriends.push(username);
@@ -185,9 +182,6 @@ export class SidebarProvider implements vscode.TreeDataProvider<TreeNode> {
         }
     }
 
-    /**
-     * Remove close friend
-     */
     removeCloseFriend(username: string) {
         const index = this.closeFriends.indexOf(username);
         if (index !== -1) {
@@ -197,14 +191,10 @@ export class SidebarProvider implements vscode.TreeDataProvider<TreeNode> {
         }
     }
 
-    /**
-     * Refresh tree view
-     */
     refresh() {
         this._onDidChangeTreeData.fire();
     }
 
-    // TreeDataProvider implementation
     getTreeItem(element: TreeNode): vscode.TreeItem {
         return element;
     }
@@ -215,76 +205,105 @@ export class SidebarProvider implements vscode.TreeDataProvider<TreeNode> {
         }
 
         if (element instanceof Category) {
-            return Promise.resolve(this.getUsersForCategory(element.label as string));
+            return Promise.resolve(this.getUsersForCategory(element.categoryType));
         }
 
         // Root level - return categories
-        const closeFriendsUsers = this.getCloseFriendsUsers();
-        return Promise.resolve([
-            new Category('Close Friends', closeFriendsUsers.length)
-        ]);
-    }
+        const onlineUsers = this.allUsers.filter(u => u.status === 'Online' || u.status === 'Away');
+        const offlineUsers = this.allUsers.filter(u => u.status === 'Offline');
+        const unreadCounts = this.chatStorage.getAllUnreadCounts();
+        const dmUsers = this.getDMUsers();
 
-    private getCloseFriendsUsers(): UserStatus[] {
-        const closeFriendsLower = this.closeFriends.map(f => f.toLowerCase());
-        
-        return this.allUsers.filter(u => {
-            // Include if pinned
-            if (closeFriendsLower.includes(u.username.toLowerCase())) {
-                return true;
-            }
-            // Include manual connections (not in followers/following)
-            return this.isManualConnection(u.username);
-        });
-    }
+        const categories: TreeNode[] = [];
 
-    private isManualConnection(username: string): boolean {
-        if (!this.isGitHubConnected) return true;
-        
-        const lower = username.toLowerCase();
-        const isFollower = this.followers.some(f => f.login.toLowerCase() === lower);
-        const isFollowing = this.following.some(f => f.login.toLowerCase() === lower);
-        return !isFollower && !isFollowing;
-    }
+        // Online section
+        categories.push(new Category(
+            `🟢 Online`,
+            'online',
+            onlineUsers.length,
+            vscode.TreeItemCollapsibleState.Expanded
+        ));
 
-    private getUsersForCategory(category: string): UserNode[] {
-        let users: UserStatus[] = [];
-
-        switch (category) {
-            case 'Close Friends':
-                users = this.getCloseFriendsUsers();
-                break;
-            case 'Following':
-                users = this.getFollowingUsers();
-                break;
-            case 'Followers':
-                users = this.getFollowersUsers();
-                break;
-            case 'All Users':
-                users = this.allUsers.filter(u => u.username !== this.profile.login);
-                break;
+        // Offline section
+        if (offlineUsers.length > 0) {
+            categories.push(new Category(
+                `⚫ Offline`,
+                'offline',
+                offlineUsers.length,
+                vscode.TreeItemCollapsibleState.Collapsed
+            ));
         }
 
+        // Direct Messages section
+        const totalUnread = Array.from(unreadCounts.values()).reduce((a, b) => a + b, 0);
+        if (dmUsers.length > 0 || totalUnread > 0) {
+            categories.push(new Category(
+                totalUnread > 0 ? `💬 Messages (${totalUnread})` : `💬 Messages`,
+                'dms',
+                dmUsers.length,
+                vscode.TreeItemCollapsibleState.Expanded
+            ));
+        }
+
+        return Promise.resolve(categories);
+    }
+
+    private getDMUsers(): string[] {
+        // Get users we've chatted with
         const unreadCounts = this.chatStorage.getAllUnreadCounts();
-        return users.map(u => new UserNode(
-            u,
-            this.isManualConnection(u.username),
-            unreadCounts.get(u.username.toLowerCase()) || 0
-        ));
+        const usersWithUnread = Array.from(unreadCounts.keys());
+        
+        // Combine with recent chats, prioritize unread
+        const allDMUsers = [...new Set([...usersWithUnread, ...this.recentChats])];
+        return allDMUsers.slice(0, 10);
     }
 
-    private getFollowingUsers(): UserStatus[] {
-        const logins = this.following.map(f => f.login.toLowerCase());
-        return this.allUsers.filter(u => logins.includes(u.username.toLowerCase()));
-    }
+    private getUsersForCategory(categoryType: string): TreeNode[] {
+        const unreadCounts = this.chatStorage.getAllUnreadCounts();
 
-    private getFollowersUsers(): UserStatus[] {
-        const logins = this.followers.map(f => f.login.toLowerCase());
-        return this.allUsers.filter(u => logins.includes(u.username.toLowerCase()));
+        switch (categoryType) {
+            case 'online': {
+                const users = this.allUsers
+                    .filter(u => u.status === 'Online' || u.status === 'Away')
+                    .filter(u => u.username !== this.profile.login);
+                return users.map(u => new UserNode(u, unreadCounts.get(u.username.toLowerCase()) || 0));
+            }
+
+            case 'offline': {
+                const users = this.allUsers
+                    .filter(u => u.status === 'Offline')
+                    .filter(u => u.username !== this.profile.login);
+                return users.map(u => new UserNode(u, unreadCounts.get(u.username.toLowerCase()) || 0));
+            }
+
+            case 'dms': {
+                const dmUsers = this.getDMUsers();
+                return dmUsers.map(username => {
+                    const user = this.allUsers.find(u => u.username.toLowerCase() === username.toLowerCase());
+                    const unread = unreadCounts.get(username.toLowerCase()) || 0;
+                    
+                    if (user) {
+                        return new DMNode(user, unread);
+                    } else {
+                        // User is offline or not in list
+                        return new DMNode({
+                            username,
+                            status: 'Offline',
+                            activity: '',
+                            project: '',
+                            language: ''
+                        }, unread);
+                    }
+                });
+            }
+
+            default:
+                return [];
+        }
     }
 }
 
-// GitHub Network View Provider
+// GitHub Network View Provider (simplified)
 export class GitHubViewProvider implements vscode.TreeDataProvider<TreeNode> {
     private _onDidChangeTreeData = new vscode.EventEmitter<TreeNode | undefined | void>();
     readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
@@ -307,37 +326,30 @@ export class GitHubViewProvider implements vscode.TreeDataProvider<TreeNode> {
         }
 
         if (element instanceof Category) {
-            return Promise.resolve(this.getUsersForCategory(element.label as string));
+            return Promise.resolve(this.getUsersForCategory(element.categoryType));
         }
 
-        const followingCount = this.getFollowingUsers().length;
-        const followersCount = this.getFollowersUsers().length;
-        const allCount = this.sidebarProvider.getAllUsers().length;
+        const followingUsers = this.getFollowingUsers();
+        const followersUsers = this.getFollowersUsers();
 
         return Promise.resolve([
-            new Category('Following', followingCount),
-            new Category('Followers', followersCount),
-            new Category('All Users', allCount)
+            new Category('Following', 'following', followingUsers.length, vscode.TreeItemCollapsibleState.Collapsed),
+            new Category('Followers', 'followers', followersUsers.length, vscode.TreeItemCollapsibleState.Collapsed),
         ]);
     }
 
-    private getUsersForCategory(category: string): UserNode[] {
-        let users: UserStatus[] = [];
-        const profile = this.sidebarProvider.getProfile();
+    private getUsersForCategory(categoryType: string): UserNode[] {
+        const chatStorage = this.sidebarProvider.getChatStorage();
+        const unreadCounts = chatStorage.getAllUnreadCounts();
 
-        switch (category) {
-            case 'Following':
-                users = this.getFollowingUsers();
-                break;
-            case 'Followers':
-                users = this.getFollowersUsers();
-                break;
-            case 'All Users':
-                users = this.sidebarProvider.getAllUsers().filter(u => u.username !== profile.login);
-                break;
+        switch (categoryType) {
+            case 'following':
+                return this.getFollowingUsers().map(u => new UserNode(u, unreadCounts.get(u.username.toLowerCase()) || 0));
+            case 'followers':
+                return this.getFollowersUsers().map(u => new UserNode(u, unreadCounts.get(u.username.toLowerCase()) || 0));
+            default:
+                return [];
         }
-
-        return users.map(u => new UserNode(u, false, 0));
     }
 
     private getFollowingUsers(): UserStatus[] {
@@ -352,12 +364,17 @@ export class GitHubViewProvider implements vscode.TreeDataProvider<TreeNode> {
 }
 
 // Tree Node Types
-type TreeNode = Category | UserNode;
+type TreeNode = Category | UserNode | DMNode;
 
 class Category extends vscode.TreeItem {
-    constructor(label: string, count: number) {
-        super(label, vscode.TreeItemCollapsibleState.Expanded);
-        this.description = `${count}`;
+    constructor(
+        label: string,
+        public categoryType: string,
+        count: number,
+        collapsibleState: vscode.TreeItemCollapsibleState
+    ) {
+        super(label, collapsibleState);
+        this.description = count > 0 ? `${count}` : '';
         this.contextValue = 'category';
     }
 }
@@ -365,16 +382,103 @@ class Category extends vscode.TreeItem {
 class UserNode extends vscode.TreeItem {
     constructor(
         public user: UserStatus,
-        isManualConnection: boolean,
         unreadCount: number
     ) {
         super(user.username, vscode.TreeItemCollapsibleState.None);
 
-        this.description = unreadCount > 0 
-            ? `🔵 ${buildUserDescription(user)}`
-            : buildUserDescription(user);
-        this.tooltip = buildUserTooltip(user);
-        this.iconPath = getStatusIcon(user.status);
-        this.contextValue = isManualConnection ? 'user-manual' : 'user';
+        // Build description: Activity • Project (Language)
+        const parts: string[] = [];
+        
+        if (user.status === 'Offline') {
+            if (user.lastSeen) {
+                this.description = `Last seen ${formatLastSeen(user.lastSeen)}`;
+            } else {
+                this.description = 'Offline';
+            }
+        } else {
+            if (user.activity && user.activity !== 'Hidden' && user.activity !== 'Idle') {
+                parts.push(user.activity);
+            }
+            if (user.project && user.project !== 'Hidden') {
+                parts.push(user.project);
+            }
+            if (user.language && user.language !== 'Hidden') {
+                parts.push(`(${user.language})`);
+            }
+            this.description = parts.join(' • ') || (user.status === 'Away' ? 'Away' : 'Online');
+        }
+
+        // Add unread indicator
+        if (unreadCount > 0) {
+            this.label = `${user.username} 🔵`;
+        }
+
+        // Status icon
+        this.iconPath = this.getStatusIcon(user.status);
+        
+        // Tooltip
+        this.tooltip = this.buildTooltip(user);
+        
+        this.contextValue = 'user';
+    }
+
+    private getStatusIcon(status: string): vscode.ThemeIcon {
+        switch (status) {
+            case 'Online':
+                return new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor('charts.green'));
+            case 'Away':
+                return new vscode.ThemeIcon('circle-filled', new vscode.ThemeColor('charts.yellow'));
+            default:
+                return new vscode.ThemeIcon('circle-outline', new vscode.ThemeColor('disabledForeground'));
+        }
+    }
+
+    private buildTooltip(user: UserStatus): vscode.MarkdownString {
+        const md = new vscode.MarkdownString();
+        md.appendMarkdown(`**${user.username}**\n\n`);
+        md.appendMarkdown(`Status: ${user.status}\n\n`);
+        if (user.activity && user.activity !== 'Hidden') {
+            md.appendMarkdown(`Activity: ${user.activity}\n\n`);
+        }
+        if (user.project && user.project !== 'Hidden') {
+            md.appendMarkdown(`Project: ${user.project}\n\n`);
+        }
+        if (user.language && user.language !== 'Hidden') {
+            md.appendMarkdown(`Language: ${user.language}`);
+        }
+        return md;
+    }
+}
+
+class DMNode extends vscode.TreeItem {
+    constructor(
+        public user: UserStatus,
+        unreadCount: number
+    ) {
+        super(user.username, vscode.TreeItemCollapsibleState.None);
+
+        // Show unread count or status
+        if (unreadCount > 0) {
+            this.description = `${unreadCount} new`;
+            this.label = `${user.username} 🔵`;
+        } else {
+            this.description = user.status === 'Online' ? '🟢' : (user.status === 'Away' ? '🟡' : '');
+        }
+
+        // Icon based on status
+        if (user.status === 'Online') {
+            this.iconPath = new vscode.ThemeIcon('comment', new vscode.ThemeColor('charts.green'));
+        } else if (user.status === 'Away') {
+            this.iconPath = new vscode.ThemeIcon('comment', new vscode.ThemeColor('charts.yellow'));
+        } else {
+            this.iconPath = new vscode.ThemeIcon('comment');
+        }
+
+        this.contextValue = 'dm';
+        this.command = {
+            command: 'codecircle.openChat',
+            title: 'Open Chat',
+            arguments: [{ user }]
+        };
     }
 }
